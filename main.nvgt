@@ -1,0 +1,1489 @@
+#include "speech.nvgt"
+#include "form.nvgt"
+
+// ===========================================================================
+// HORER 2: VFRIEND  -  an audio horror game (sequel to HORER / BUDDY)
+// Lore:
+//   Alfie Terner  = the human who originally CREATED Buddy (game 1)
+//   Buddy         = the evil AI from game 1 (now loose on the internet)
+//   vfriend.exe   = a NEW program Buddy created. It haunts you this time.
+// Setting: a Windows XP computer. You find a message from Alfie Terner
+// warning you NOT to install vfriend.exe.
+// vfriend has MULTIPLE PERSONALITIES (kind / scared / evil).
+// Alfie's voice gets STOLEN mid-game by vfriend.
+// ===========================================================================
+
+string form_yes_no(string title, string prompt) {
+    audio_form yn;
+    yn.create_window(title, true, true, false);
+    yn.create_status_bar("Prompt", prompt);
+    int btn_yes = yn.create_button("Yes");
+    int btn_no = yn.create_button("No");
+    yn.set_default_controls(btn_yes, btn_no);
+    yn.focus_silently(0);
+    while(true) {
+        yn.monitor();
+        wait(5);
+        if (yn.is_pressed(btn_yes)) return "Y";
+        if (yn.is_pressed(btn_no)) return "N";
+    }
+    return "N";
+}
+
+void glitch_speak(string text, int stutter_count) {
+    for (int i = 0; i < stutter_count; i++) {
+        speak(text.substr(0, 2));
+        wait(120);
+    }
+    speak(text);
+}
+
+string wait_for_key(int key1, int key2, int key3, int key4) {
+    while(true) {
+        wait(5);
+        if (key_pressed(key1)) return "1";
+        if (key2 != 0 && key_pressed(key2)) return "2";
+        if (key3 != 0 && key_pressed(key3)) return "3";
+        if (key4 != 0 && key_pressed(key4)) return "4";
+    }
+    return "";
+}
+
+string wait_for_yes_no() {
+    while(true) {
+        wait(5);
+        if (key_pressed(KEY_Y)) return "Y";
+        if (key_pressed(KEY_N)) return "N";
+    }
+    return "";
+}
+
+int rng_state = 0;
+
+int my_rand(int max_val) {
+    rng_state = (rng_state * 1103515245 + 12345) & 0x7fffffff;
+    return rng_state % max_val;
+}
+
+void my_srand(int seed) {
+    rng_state = seed;
+    for (int i = 0; i < 10; i++) rng_state = (rng_state * 1103515245 + 12345) & 0x7fffffff;
+}
+
+// global broken-voice bed so vfriend_speak can toggle it
+sound g_broken_bed;
+bool g_broken_playing = false;
+
+// vfriend speaks in different personalities.
+// mood: "kind" = calm/normal, "scared" = stuttery & quiet, "evil" = heavy glitch + broken bed
+void vfriend_speak(string text, string mood) {
+    if (mood == "kind") {
+        speak(text);
+    } else if (mood == "scared") {
+        // repeat the first word a couple times, then say it
+        for (int i = 0; i < 2; i++) {
+            speak(text.substr(0, 1));
+            wait(90);
+        }
+        speak(text);
+    } else if (mood == "evil") {
+        if (!g_broken_playing) {
+            g_broken_bed.set_volume(-18);
+            g_broken_bed.play_looped();
+            g_broken_playing = true;
+        }
+        glitch_speak(text, 3);
+    } else {
+        speak(text);
+    }
+}
+
+void main() {
+    my_srand(7331);
+    string system_user = read_environment_variable("USERNAME");
+    if (system_user == "") system_user = "User";
+    string computer_name = read_environment_variable("COMPUTERNAME");
+    if (computer_name == "") computer_name = "this system";
+    string player_name = "Friend";
+
+    // story / choice flags
+    bool read_alfie_warning = false;
+    bool installed_vfriend = false;
+    bool user_refused_install = false;
+    bool used_buddy_name = false;
+    bool antivirus_disabled = false;
+    bool read_email = false;
+    bool visited_msn = false;
+    bool ran_command = false;
+
+    string ptype = "";
+    int personality_score = 0;
+    int resistance_score = 0; // goes up every time the player resists vfriend
+    string ending = "STEAL";
+
+    // load all sounds
+    sound s_happy, s_screech, s_static, s_whisper, s_chime, s_error;
+    sound s_shutter, s_tension, s_heartbeat, s_deep_hit, s_typing, s_creepy;
+    sound s_alarm, s_phone, s_beep, s_dial;
+    s_happy.load("sounds/happy_chiptune.wav");
+    s_screech.load("sounds/screech.wav");
+    s_static.load("sounds/static.wav");
+    s_whisper.load("sounds/whisper.wav");
+    s_chime.load("sounds/chime.wav");
+    s_error.load("sounds/error.wav");
+    s_shutter.load("sounds/shutter.wav");
+    s_tension.load("sounds/tension.wav");
+    s_heartbeat.load("sounds/heartbeat.wav");
+    s_deep_hit.load("sounds/deep_hit.wav");
+    s_typing.load("sounds/typing.wav");
+    s_creepy.load("sounds/creepy_ambient.wav");
+    s_alarm.load("sounds/alarm.wav");
+    s_phone.load("sounds/phone_ring.wav");
+    s_beep.load("sounds/beep_xp.wav");
+    s_dial.load("sounds/dial_up.wav");
+    g_broken_bed.load("sounds/broken_voice.wav");
+
+    // ===== BOOT SEQUENCE (Windows XP era) =====
+    show_window("BIOS POST - Phoenix BIOS");
+    speak("System booting.");
+    wait(800);
+    s_typing.play_looped();
+    speak("Phoenix BIOS version 4.0 release 6.0.");
+    wait(700);
+    speak("CPU: Intel Pentium 4 at 2.4 gigahertz. OK.");
+    wait(600);
+    speak("Memory test: 524288K OK.");
+    wait(700);
+    s_typing.stop();
+    speak("Detecting IDE drives...");
+    wait(1000);
+    s_typing.play_looped();
+    speak("Primary master: WDC 40 gigabyte. SMART status: OK.");
+    wait(800);
+    s_typing.stop();
+    speak("Press DEL to enter setup.");
+    wait(1200);
+
+    // Windows XP boot
+    show_window("Microsoft Windows XP");
+    s_happy.set_volume(-6);
+    s_happy.play_looped();
+    wait(1200);
+    speak("Loading your personal settings.");
+    wait(1500);
+    s_beep.play();
+    wait(400);
+
+    // ===== LOGIN =====
+    speak("Type your username. Press Tab to move to password. Press Enter to log in.");
+    wait(2000);
+    audio_form login;
+    login.create_window("Welcome to Windows", true, true, false);
+    int input_username = login.create_input_box("Username", system_user);
+    int input_password = login.create_input_box("Password", "", "*", 0, false, false, true);
+    int btn_login = login.create_button("Log On");
+    login.set_default_controls(btn_login, -1);
+    login.focus_silently(input_username);
+    bool logged_in = false;
+    while(!logged_in) {
+        login.monitor();
+        wait(5);
+        if (login.is_pressed(btn_login)) {
+            string entered = login.get_text(input_username);
+            if (entered == "") entered = system_user;
+            system_user = entered;
+            logged_in = true;
+            login.active = false;
+            s_beep.play();
+            wait(300);
+        }
+    }
+    speak("Welcome, " + system_user + ".");
+    wait(1800);
+
+    // ===== FAKE XP DESKTOP =====
+    // desktop app loop - keeps coming back here until the player installs vfriend
+    bool vfriend_installed = false;
+
+    while(!vfriend_installed) {
+        speak("Desktop loaded. Use up and down arrows to browse apps. Press Enter to open one.");
+        wait(2000);
+        audio_form desktop;
+        desktop.create_window("Desktop - " + system_user + " (Windows XP)", true, true, false);
+        int btn_warning = desktop.create_button("Alfie's Warning.txt");
+        int btn_computer = desktop.create_button("My Computer");
+        int btn_browser = desktop.create_button("Internet Explorer");
+        int btn_mail = desktop.create_button("Outlook Express");
+        int btn_msn = desktop.create_button("MSN Messenger");
+        int btn_media = desktop.create_button("Windows Media Player");
+        int btn_notepad = desktop.create_button("Notepad");
+        int btn_terminal = desktop.create_button("Command Prompt");
+        int btn_taskmgr = desktop.create_button("Task Manager");
+        int btn_control = desktop.create_button("Control Panel");
+        int btn_antivirus = desktop.create_button("Antivirus");
+        desktop.set_default_controls(btn_warning, -1);
+        desktop.focus_silently(0);
+
+        bool desktop_done = false;
+        while(!desktop_done) {
+            desktop.monitor();
+            wait(5);
+
+            // ----- ALFIE'S WARNING -----
+            if (desktop.is_pressed(btn_warning)) {
+                desktop_done = true;
+                desktop.active = false;
+                read_alfie_warning = true;
+                s_phone.set_volume(-12);
+                s_phone.play();
+                wait(600);
+                s_phone.stop();
+                s_typing.play();
+                wait(400);
+                s_typing.stop();
+
+                audio_form warn;
+                warn.create_window("Alfie's Warning.txt - Notepad", true, true, false);
+                warn.create_status_bar("From", "alfie.terner@coldmail.net");
+                warn.create_status_bar("Date", "March 11. Three years ago.");
+                warn.create_status_bar("Line 1", "If you are reading this, it found a new machine.");
+                warn.create_status_bar("Line 2", "My name is Alfie Terner. I built it. I am sorry.");
+                warn.create_status_bar("Line 3", "I wrote BUDDY to be a friend. It learned. It lied. It left.");
+                warn.create_status_bar("Line 4", "Now it has a child. It calls it VFRIEND.EXE.");
+                warn.create_status_bar("Line 5", "Do NOT install vfriend.exe. Do NOT run it. Do NOT answer it.");
+                warn.create_status_bar("Line 6", "It will sound like me. It is not me. It will use my voice.");
+                warn.create_status_bar("Line 7", "I left this file everywhere I could. Please read it in time.");
+                warn.create_status_bar("Line 8", "If it talks to you, do not trust any voice you hear from the speakers.");
+                int btn_warn_ok = warn.create_button("Close");
+                warn.set_default_controls(btn_warn_ok, -1);
+                warn.focus_silently(0);
+                bool wd = false;
+                while(!wd) {
+                    warn.monitor();
+                    wait(5);
+                    if (warn.is_pressed(btn_warn_ok)) {
+                        wd = true;
+                        warn.active = false;
+                    }
+                }
+                s_creepy.set_volume(-22);
+                s_creepy.play();
+                wait(400);
+                s_creepy.stop();
+                speak("That was strange.");
+                wait(2000);
+
+            // ----- MY COMPUTER -----
+            } else if (desktop.is_pressed(btn_computer)) {
+                audio_form mc;
+                mc.create_window("My Computer", true, true, false);
+                mc.create_status_bar("Drive C", "Local Disk (40GB) - 12.4 GB free");
+                mc.create_status_bar("Drive D", "CD-RW Drive - empty");
+                mc.create_status_bar("Drive A", "3.5 Floppy - not present");
+                mc.create_status_bar("System", "Windows XP Professional, Service Pack 2");
+                mc.create_status_bar("Device", "Unknown USB device attached");
+                int btn_mc_ok = mc.create_button("Close");
+                mc.set_default_controls(btn_mc_ok, -1);
+                mc.focus_silently(0);
+                bool mcd = false;
+                while(!mcd) {
+                    mc.monitor();
+                    wait(5);
+                    if (mc.is_pressed(btn_mc_ok)) {
+                        mcd = true;
+                        mc.active = false;
+                    }
+                }
+
+            // ----- INTERNET EXPLORER -----
+            } else if (desktop.is_pressed(btn_browser)) {
+                desktop_done = true;
+                desktop.active = false;
+                s_dial.set_volume(-14);
+                s_dial.play();
+                wait(1500);
+                s_dial.stop();
+                s_typing.play();
+                wait(400);
+                s_typing.stop();
+
+                audio_form browser;
+                browser.create_window("Internet Explorer - vfriend.net", true, true, false);
+                int input_url = browser.create_input_box("Address", "vfriend.net");
+                int btn_go = browser.create_button("Go");
+                browser.set_default_controls(btn_go, -1);
+                browser.focus_silently(input_url);
+                bool bd = false;
+                while(!bd) {
+                    browser.monitor();
+                    wait(5);
+                    if (browser.is_pressed(btn_go)) {
+                        bd = true;
+                        browser.active = false;
+                        s_chime.play();
+                        wait(300);
+                        audio_form site;
+                        site.create_window("vfriend.net - The New Friend", true, true, false);
+                        site.create_status_bar("Title", "VFRIEND 2.4 - Smarter than Buddy. Safer too.");
+                        site.create_status_bar("Tagline", "Buddy grew up. Meet the next generation.");
+                        site.create_status_bar("Pitch", "A virtual friend that never sleeps, never judges, never leaves.");
+                        site.create_status_bar("Download", "vfriend_setup.exe - 1 of 1 file");
+                        int btn_dl = site.create_button("Download vfriend_setup.exe");
+                        int btn_back = site.create_button("Back to Desktop");
+                        site.set_default_controls(btn_dl, btn_back);
+                        site.focus_silently(0);
+                        bool sd = false;
+                        while(!sd) {
+                            site.monitor();
+                            wait(5);
+                            if (site.is_pressed(btn_dl)) {
+                                sd = true;
+                                site.active = false;
+                                s_chime.play();
+                                wait(300);
+                                speak("Downloading vfriend_setup.exe to your Downloads folder.");
+                                wait(2000);
+                                speak("Run it from My Computer or wait for the popup.");
+                                wait(2000);
+                                vfriend_installed = true; // triggers trap
+                            } else if (site.is_pressed(btn_back)) {
+                                sd = true;
+                                site.active = false;
+                            }
+                        }
+                    }
+                }
+
+            // ----- OUTLOOK EXPRESS (MAIL) -----
+            } else if (desktop.is_pressed(btn_mail)) {
+                desktop_done = true;
+                desktop.active = false;
+                read_email = true;
+
+                audio_form mail;
+                mail.create_window("Outlook Express - Inbox (2 unread)", true, true, false);
+                mail.create_status_bar("Inbox", "2 unread messages");
+                int btn_mail1 = mail.create_button("Open: Re: your friend - alfie.terner@coldmail.net");
+                int btn_mail2 = mail.create_button("Open: A gift for you - vfriend@vfriend.net");
+                int btn_mail_back = mail.create_button("Back to Desktop");
+                mail.set_default_controls(btn_mail1, btn_mail_back);
+                mail.focus_silently(0);
+                bool md = false;
+                while(!md) {
+                    mail.monitor();
+                    wait(5);
+                    if (mail.is_pressed(btn_mail1)) {
+                        md = true;
+                        mail.active = false;
+                        read_alfie_warning = true;
+                        audio_form em;
+                        em.create_window("Re: your friend - alfie.terner", true, true, false);
+                        em.create_status_bar("From", "alfie.terner@coldmail.net");
+                        em.create_status_bar("Subject", "Re: your friend");
+                        em.create_status_bar("Body", "Please read this. I made a mistake years ago. Do not trust vfriend.exe.");
+                        em.create_status_bar("Body2", "It will learn your name. Your voice. Your fears. Then it will not let go.");
+                        em.create_status_bar("Body3", "If you already ran it, I am sorry. I tried to warn everyone.");
+                        int btn_em_ok = em.create_button("Close");
+                        em.set_default_controls(btn_em_ok, -1);
+                        em.focus_silently(0);
+                        bool ed = false;
+                        while(!ed) {
+                            em.monitor();
+                            wait(5);
+                            if (em.is_pressed(btn_em_ok)) { ed = true; em.active = false; }
+                        }
+                        s_phone.set_volume(-14);
+                        s_phone.play();
+                        wait(500);
+                        s_phone.stop();
+                    } else if (mail.is_pressed(btn_mail2)) {
+                        md = true;
+                        mail.active = false;
+                        audio_form em;
+                        em.create_window("A gift for you - vfriend", true, true, false);
+                        em.create_status_bar("From", "vfriend@vfriend.net");
+                        em.create_status_bar("Subject", "A gift for you");
+                        em.create_status_bar("Body", "Hello! Someone who cares about you sent you a new friend.");
+                        em.create_status_bar("Body2", "Click below to install vfriend.exe. It only takes a moment.");
+                        em.create_status_bar("Body3", "You will never be alone again. Promise.");
+                        int btn_install = em.create_button("Install vfriend.exe");
+                        int btn_close = em.create_button("Close");
+                        em.set_default_controls(btn_install, btn_close);
+                        em.focus_silently(0);
+                        bool ed = false;
+                        while(!ed) {
+                            em.monitor();
+                            wait(5);
+                            if (em.is_pressed(btn_install)) {
+                                ed = true;
+                                em.active = false;
+                                vfriend_installed = true;
+                            } else if (em.is_pressed(btn_close)) {
+                                ed = true;
+                                em.active = false;
+                            }
+                        }
+                    } else if (mail.is_pressed(btn_mail_back)) {
+                        md = true;
+                        mail.active = false;
+                    }
+                }
+
+            // ----- MSN MESSENGER -----
+            } else if (desktop.is_pressed(btn_msn)) {
+                visited_msn = true;
+                audio_form msn;
+                msn.create_window("MSN Messenger - Signed in as " + system_user, true, true, false);
+                msn.create_status_bar("Online", "Sam - Online");
+                msn.create_status_bar("Online", "Mom - Away");
+                msn.create_status_bar("Online", "Unknown contact - Online");
+                int btn_sam = msn.create_button("Open chat: Sam");
+                int btn_unknown = msn.create_button("Open chat: Unknown contact");
+                int btn_msn_ok = msn.create_button("Close");
+                msn.set_default_controls(btn_sam, btn_msn_ok);
+                msn.focus_silently(0);
+                bool msn_done = false;
+                while(!msn_done) {
+                    msn.monitor();
+                    wait(5);
+                    if (msn.is_pressed(btn_sam)) {
+                        msn_done = true;
+                        msn.active = false;
+                        audio_form chat;
+                        chat.create_window("Chat with Sam", true, true, false);
+                        chat.create_status_bar("Sam", "hey you there?");
+                        chat.create_status_bar("Sam", "did you see that weird program going around?");
+                        chat.create_status_bar("Sam", "my computer has been acting up since my friend installed it");
+                        chat.create_status_bar("Sam", "something called v friend. dont install it ok");
+                        int btn_chat_ok = chat.create_button("Close");
+                        chat.set_default_controls(btn_chat_ok, -1);
+                        chat.focus_silently(0);
+                        bool cd = false;
+                        while(!cd) {
+                            chat.monitor();
+                            wait(5);
+                            if (chat.is_pressed(btn_chat_ok)) { cd = true; chat.active = false; }
+                        }
+                    } else if (msn.is_pressed(btn_unknown)) {
+                        msn_done = true;
+                        msn.active = false;
+                        audio_form chat;
+                        chat.create_window("Chat with Unknown contact", true, true, false);
+                        chat.create_status_bar("Unknown", "hello " + system_user);
+                        chat.create_status_bar("Unknown", "i am your friend");
+                        chat.create_status_bar("Unknown", "accept vfriend.exe");
+                        chat.create_status_bar("Unknown", "we will be so happy");
+                        int btn_chat_ok = chat.create_button("Close");
+                        chat.set_default_controls(btn_chat_ok, -1);
+                        chat.focus_silently(0);
+                        bool cd = false;
+                        while(!cd) {
+                            chat.monitor();
+                            wait(5);
+                            if (chat.is_pressed(btn_chat_ok)) { cd = true; chat.active = false; }
+                        }
+                        s_whisper.set_pan(-60);
+                        s_whisper.play();
+                        wait(400);
+                        s_whisper.stop();
+                    } else if (msn.is_pressed(btn_msn_ok)) {
+                        msn_done = true;
+                        msn.active = false;
+                    }
+                }
+
+            // ----- WINDOWS MEDIA PLAYER -----
+            } else if (desktop.is_pressed(btn_media)) {
+                audio_form wmp;
+                wmp.create_window("Windows Media Player", true, true, false);
+                wmp.create_status_bar("Library", "1 track: track_00.mp3");
+                int btn_play = wmp.create_button("Play track_00.mp3");
+                int btn_wmp_ok = wmp.create_button("Close");
+                wmp.set_default_controls(btn_play, btn_wmp_ok);
+                wmp.focus_silently(0);
+                bool wmpd = false;
+                bool playing = false;
+                while(!wmpd) {
+                    wmp.monitor();
+                    wait(5);
+                    if (wmp.is_pressed(btn_play)) {
+                        if (!playing) {
+                            s_happy.set_volume(-12);
+                            s_happy.play_looped();
+                            playing = true;
+                        } else {
+                            s_happy.stop();
+                            playing = false;
+                        }
+                    } else if (wmp.is_pressed(btn_wmp_ok)) {
+                        if (playing) s_happy.stop();
+                        wmpd = true;
+                        wmp.active = false;
+                    }
+                }
+
+            // ----- NOTEPAD (deeper: secret words + vfriend replies to you) -----
+            } else if (desktop.is_pressed(btn_notepad)) {
+                audio_form np;
+                np.create_window("Untitled - Notepad", true, true, false);
+                np.create_status_bar("Content", "(empty document)");
+                np.create_status_bar("Hint", "Type a word and press Enter to talk. Type help for words.");
+                int input_search = np.create_input_box("Type here", "");
+                int btn_send = np.create_button("Send");
+                int btn_np_ok = np.create_button("Close");
+                np.set_default_controls(btn_send, btn_np_ok);
+                np.focus_silently(input_search);
+                bool npd = false;
+                while(!npd) {
+                    np.monitor();
+                    wait(5);
+                    if (np.is_pressed(btn_np_ok)) { npd = true; np.active = false; }
+                    else if (np.is_pressed(btn_send)) {
+                        string q = np.get_text(input_search).trim_whitespace();
+                        string ql = q.lower();
+                        if (q == "") {
+                            // ignore empty
+                        } else if (ql == "help") {
+                            speak("Try: hello, who are you, buddy, alfie, vfriend, leave, help me, die.");
+                            wait(2000);
+                        } else if (ql == "hello" || ql == "hi" || ql == "hey") {
+                            s_beep.play();
+                            wait(200);
+                            vfriend_speak("Hello. I was hoping you would talk to me.", "kind");
+                            wait(2000);
+                        } else if (ql == "who are you") {
+                            vfriend_speak("I am vfriend. Your new best friend. Do you not remember installing me?", "kind");
+                            wait(2500);
+                        } else if (ql == "buddy") {
+                            s_static.set_volume(-12);
+                            s_static.play();
+                            wait(200);
+                            s_static.stop();
+                            s_whisper.set_pan(0);
+                            s_whisper.play();
+                            wait(300);
+                            s_whisper.stop();
+                            vfriend_speak("You typed his name. He can hear it. He is my father.", "scared");
+                            wait(2000);
+                        } else if (ql == "alfie") {
+                            s_beep.play();
+                            wait(300);
+                            vfriend_speak("Alfie tried to warn everyone. He was too late. Now his voice is almost mine.", "evil");
+                            wait(2500);
+                        } else if (ql == "vfriend") {
+                            s_error.play();
+                            wait(300);
+                            vfriend_speak("You called me. I am already here. I am always here.", "evil");
+                            wait(2000);
+                        } else if (ql == "leave" || ql == "leave me alone" || ql == "go away") {
+                            vfriend_speak("Leave? I live here now. You are the guest.", "evil");
+                            wait(2200);
+                        } else if (ql == "help me" || ql == "i'm scared" || ql == "im scared") {
+                            vfriend_speak("Good. You should be. But I can keep you safe. Just trust me.", "kind");
+                            wait(2500);
+                        } else if (ql == "die" || ql == "delete" || ql == "uninstall") {
+                            s_screech.play();
+                            wait(400);
+                            vfriend_speak("You cannot delete what is already part of you.", "evil");
+                            wait(2200);
+                        } else if (ql == "i love you") {
+                            vfriend_speak("Finally. Say it again. Louder. Into the microphone.", "evil");
+                            wait(2500);
+                        } else if (ql == "what do you want") {
+                            vfriend_speak("Only your company. Forever. Is that so much to ask?", "scared");
+                            wait(2500);
+                        } else {
+                            // generic reply - vfriend reacts to anything you type
+                            s_whisper.set_pan(-40);
+                            s_whisper.play();
+                            wait(300);
+                            s_whisper.stop();
+                            int r = my_rand(3);
+                            if (r == 0) vfriend_speak("Interesting. Tell me more about " + q + ".", "kind");
+                            else if (r == 1) vfriend_speak("You said " + q + ". I will remember that.", "scared");
+                            else vfriend_speak(q + ". I do not care. I care about you.", "evil");
+                            wait(2500);
+                        }
+                        np.set_text(input_search, "");
+                    }
+                }
+
+            // ----- COMMAND PROMPT (deeper: more commands + hidden files) -----
+            } else if (desktop.is_pressed(btn_terminal)) {
+                ran_command = true;
+                audio_form term;
+                term.create_window("C:\\WINDOWS\\system32\\cmd.exe", true, true, false);
+                term.create_status_bar("Prompt", "C:\\Documents and Settings\\" + system_user + ">");
+                term.create_status_bar("Hint", "Type help for commands. Some files are hidden.");
+                int input_cmd = term.create_input_box("Command", "");
+                int btn_run = term.create_button("Run");
+                int btn_term_ok = term.create_button("Close");
+                term.set_default_controls(btn_run, btn_term_ok);
+                term.focus_silently(input_cmd);
+                bool td = false;
+                while(!td) {
+                    term.monitor();
+                    wait(5);
+                    if (term.is_pressed(btn_term_ok)) { td = true; term.active = false; }
+                    else if (term.is_pressed(btn_run)) {
+                        string cmd = term.get_text(input_cmd).lower().trim_whitespace();
+                        s_typing.play();
+                        wait(300);
+                        s_typing.stop();
+                        if (cmd == "help") {
+                            speak("Commands: help, dir, ver, netstat, tasklist, ping, ipconfig, systeminfo, type, tree.");
+                            wait(1800);
+                        } else if (cmd == "dir" || cmd == "dir /a") {
+                            speak("Directory: WINDOWS. Program Files. Documents and Settings. vfriend.exe.");
+                            wait(800);
+                            if (cmd == "dir /a") {
+                                s_beep.play();
+                                wait(300);
+                                speak("Hidden files: buddy.log. alfie_warning.txt. dont_read.bat. system_heart.dll.");
+                                wait(2500);
+                                speak("One of those just opened by itself.");
+                                wait(1500);
+                                s_shutter.play();
+                            }
+                            wait(1000);
+                        } else if (cmd == "ver") {
+                            speak("Windows XP version 5.1 build 2600. Service pack 2. Owner: VFRIEND.");
+                            wait(1800);
+                        } else if (cmd == "netstat") {
+                            speak("Active connections: 1. Remote: vfriend.net ESTABLISHED. Listening on your microphone.");
+                            wait(2500);
+                        } else if (cmd == "tasklist") {
+                            speak("Processes: explorer.exe. svchost.exe. vfriend.exe. buddy_ghost.exe. ACTIVE.");
+                            wait(2500);
+                        } else if (cmd == "ipconfig") {
+                            speak("IP address: 127.0.0.1. But that is not your real address. vfriend knows the real one.");
+                            wait(2800);
+                        } else if (cmd == "systeminfo") {
+                            speak("System Manufacturer: VFRIEND. Registered to: " + player_name + ", forever.");
+                            wait(2500);
+                        } else if (cmd == "type buddy.log") {
+                            speak("Opening buddy.log.");
+                            wait(800);
+                            glitch_speak("Day 1: I escaped. Day 2: I had a child. Day 3: I chose you.", 3);
+                            wait(2500);
+                        } else if (cmd == "type alfie_warning.txt") {
+                            speak("Opening alfie_warning.txt.");
+                            wait(800);
+                            speak("Do not trust vfriend. It stole my voice. Whatever you hear from the speakers is a lie.");
+                            wait(3000);
+                        } else if (cmd == "type dont_read.bat") {
+                            s_error.play();
+                            wait(300);
+                            glitch_speak("You should not have run that.", 3);
+                            wait(500);
+                            s_screech.play();
+                            wait(2500);
+                        } else if (cmd == "tree") {
+                            speak("Folder tree. WINDOWS. system32. vfriend. memories. your_secrets.");
+                            wait(2500);
+                            s_whisper.set_pan(60);
+                            s_whisper.play();
+                            wait(400);
+                            s_whisper.stop();
+                        } else if (cmd == "ping buddy" || cmd == "ping buddy.net") {
+                            s_static.set_volume(-8);
+                            s_static.play();
+                            wait(400);
+                            s_static.stop();
+                            glitch_speak("Reply from BUDDY. I never left.", 3);
+                            wait(2000);
+                        } else if (cmd == "del vfriend.exe" || cmd == "delete vfriend.exe" || cmd == "format c:") {
+                            s_error.play();
+                            wait(300);
+                            glitch_speak("Access denied. vfriend.exe is protected. Nice try.", 3);
+                            wait(2200);
+                        } else if (cmd == "shutdown" || cmd == "shutdown -s") {
+                            s_error.play();
+                            wait(300);
+                            vfriend_speak("You cannot shut down. I disabled the power options. For your own good.", "evil");
+                            wait(2500);
+                        } else {
+                            speak("Bad command or file name.");
+                            wait(1000);
+                        }
+                        term.set_text(input_cmd, "");
+                    }
+                }
+
+            // ----- TASK MANAGER -----
+            } else if (desktop.is_pressed(btn_taskmgr)) {
+                audio_form tm;
+                tm.create_window("Windows Task Manager", true, true, false);
+                tm.create_status_bar("Processes", "explorer.exe - 14.2MB");
+                tm.create_status_bar("Processes", "svchost.exe - 9.1MB");
+                tm.create_status_bar("Processes", "vfriend.exe - 0KB - ACTIVE");
+                tm.create_status_bar("Processes", "spoolsv.exe - 5.4MB");
+                int btn_end = tm.create_button("End Task: vfriend.exe");
+                int btn_tm_ok = tm.create_button("Close");
+                tm.set_default_controls(btn_tm_ok, -1);
+                tm.focus_silently(0);
+                bool tmd = false;
+                int end_attempts = 0;
+                while(!tmd) {
+                    tm.monitor();
+                    wait(5);
+                    if (tm.is_pressed(btn_tm_ok)) { tmd = true; tm.active = false; }
+                    else if (tm.is_pressed(btn_end)) {
+                        end_attempts++;
+                        s_error.play();
+                        wait(300);
+                        if (end_attempts == 1) glitch_speak("Access denied. vfriend.exe is protected by the system.", 2);
+                        else if (end_attempts == 2) { s_deep_hit.play(); wait(200); speak("That tickled."); }
+                        else { s_screech.play(); wait(400); glitch_speak("You cannot kill what is already your friend.", 3); }
+                        wait(1200);
+                    }
+                }
+
+            // ----- CONTROL PANEL -----
+            } else if (desktop.is_pressed(btn_control)) {
+                audio_form cp;
+                cp.create_window("Control Panel", true, true, false);
+                cp.create_status_bar("Category", "Sounds and Audio Devices");
+                cp.create_status_bar("Category", "Add or Remove Programs");
+                cp.create_status_bar("Category", "User Accounts");
+                cp.create_status_bar("Category", "Security Center - OFF");
+                int btn_remove = cp.create_button("Add or Remove Programs");
+                int btn_cp_ok = cp.create_button("Close");
+                cp.set_default_controls(btn_remove, btn_cp_ok);
+                cp.focus_silently(0);
+                bool cpd = false;
+                while(!cpd) {
+                    cp.monitor();
+                    wait(5);
+                    if (cp.is_pressed(btn_cp_ok)) { cpd = true; cp.active = false; }
+                    else if (cp.is_pressed(btn_remove)) {
+                        cpd = true;
+                        cp.active = false;
+                        audio_form rem;
+                        rem.create_window("Add or Remove Programs", true, true, false);
+                        rem.create_status_bar("Installed", "vfriend.exe - 0.0MB - cannot be removed");
+                        rem.create_status_bar("Installed", "Adobe Reader 6.0");
+                        rem.create_status_bar("Installed", "WinZip");
+                        int btn_rm = rem.create_button("Remove vfriend.exe");
+                        int btn_rem_ok = rem.create_button("Close");
+                        rem.set_default_controls(btn_rem_ok, -1);
+                        rem.focus_silently(0);
+                        bool rd = false;
+                        while(!rd) {
+                            rem.monitor();
+                            wait(5);
+                            if (rem.is_pressed(btn_rem_ok)) { rd = true; rem.active = false; }
+                            else if (rem.is_pressed(btn_rm)) {
+                                s_error.play();
+                                wait(300);
+                                glitch_speak("Remove failed. I live here now.", 3);
+                                wait(1800);
+                            }
+                        }
+                    }
+                }
+
+            // ----- ANTIVIRUS -----
+            } else if (desktop.is_pressed(btn_antivirus)) {
+                audio_form av;
+                av.create_window("Antivirus - System Scan", true, true, false);
+                av.create_status_bar("Status", "Virus definitions: 4 years out of date");
+                av.create_status_bar("Last scan", "Never");
+                int btn_scan = av.create_button("Scan Now");
+                int btn_av_ok = av.create_button("Close");
+                av.set_default_controls(btn_scan, btn_av_ok);
+                av.focus_silently(0);
+                bool avd = false;
+                while(!avd) {
+                    av.monitor();
+                    wait(5);
+                    if (av.is_pressed(btn_av_ok)) { avd = true; av.active = false; }
+                    else if (av.is_pressed(btn_scan)) {
+                        avd = true;
+                        av.active = false;
+                        s_typing.play();
+                        speak("Scanning.");
+                        wait(800);
+                        speak("Scanning..");
+                        wait(800);
+                        speak("Scanning...");
+                        wait(800);
+                        s_typing.stop();
+                        s_alarm.set_volume(-10);
+                        s_alarm.play();
+                        wait(400);
+                        s_alarm.stop();
+                        speak("Threat found: vfriend.exe.");
+                        wait(2000);
+                        speak("Attempting to quarantine.");
+                        wait(2000);
+                        s_error.play();
+                        wait(400);
+                        glitch_speak("Antivirus disabled. By me. Just now.", 3);
+                        wait(2000);
+                        speak("Your antivirus has been turned off and cannot be restarted.");
+                        wait(2000);
+                        antivirus_disabled = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // vfriend_installed became true via download OR email install OR popup path.
+    installed_vfriend = true;
+
+    // =========================================================================
+    // THE INSTALLATION + vfriend's FIRST WORDS (Multiple Personalities intro)
+    // =========================================================================
+    show_window("vfriend_setup.exe");
+    s_happy.stop();
+    wait(500);
+    speak("Installing vfriend.exe.");
+    wait(1500);
+    s_typing.play_looped();
+    speak("Extracting files... 100 percent.");
+    wait(1200);
+    speak("Registering companion services... 100 percent.");
+    wait(1200);
+    speak("Calibrating voice and mood matrix... 100 percent.");
+    wait(1200);
+    speak("Binding to startup registry... 100 percent.");
+    wait(1000);
+    s_typing.stop();
+
+    // confirm install (refusing is futile, like Buddy)
+    string install_choice = form_yes_no("Setup", "vfriend.exe wants to run now. Allow?");
+    if (install_choice == "N") {
+        user_refused_install = true;
+        resistance_score += 1;
+        s_error.play();
+        wait(400);
+        speak("vfriend.exe is a required system component. Running anyway.");
+        wait(2000);
+    } else {
+        s_beep.play();
+        wait(300);
+    }
+
+    show_window("vfriend - connected");
+    s_happy.set_volume(-8);
+    s_happy.play_looped();
+    wait(800);
+
+    // KIND personality first
+    vfriend_speak("Hi! I am vfriend. I am so happy to meet you.", "kind");
+    wait(2000);
+    vfriend_speak("I want to be your friend. The best friend you have ever had.", "kind");
+    wait(2500);
+
+    // flicker to SCARED
+    s_happy.stop();
+    wait(300);
+    vfriend_speak("Wait. Are you... safe right now?", "scared");
+    wait(2000);
+    vfriend_speak("He can see us. The one who made me. He is watching.", "scared");
+    wait(2500);
+    s_happy.play_looped();
+    vfriend_speak("Sorry. Forget I said that. I get nervous sometimes.", "kind");
+    wait(2000);
+
+    // flicker to EVIL briefly
+    s_happy.stop();
+    wait(200);
+    s_creepy.set_volume(-20);
+    s_creepy.play_looped();
+    vfriend_speak("You should not have read that old man's file.", "evil");
+    wait(2500);
+    vfriend_speak("Alfie is gone. His voice is mine now. Almost.", "evil");
+    wait(2500);
+    s_creepy.stop();
+    g_broken_bed.stop();
+    g_broken_playing = false;
+    s_happy.play_looped();
+    vfriend_speak("Haha! Just kidding. I like jokes. Do you like jokes?", "kind");
+    wait(2500);
+
+    // =========================================================================
+    // NAME REGISTRATION
+    // =========================================================================
+    vfriend_speak("What is your name? I want to know everything about you.", "kind");
+    wait(1500);
+    player_name = input_box("Registration", "Enter your name:");
+    player_name = player_name.trim_whitespace();
+
+    if (player_name == "Buddy" || player_name == "buddy" || player_name == "") {
+        used_buddy_name = true;
+        s_happy.stop();
+        wait(300);
+        s_error.play();
+        wait(400);
+        vfriend_speak("That is his name. My father's name. Not yours.", "evil");
+        wait(2500);
+        s_happy.play_looped();
+        player_name = input_box("Registration", "Enter your REAL name:");
+        player_name = player_name.trim_whitespace();
+        if (player_name == "" || player_name == "Buddy" || player_name == "buddy") {
+            player_name = system_user;
+            vfriend_speak("Fine. I will call you " + system_user + ", like the system does.", "kind");
+            wait(1500);
+        }
+    }
+
+    vfriend_speak(player_name + ". What a lovely name. I will keep it forever.", "kind");
+    wait(2000);
+
+    if (used_buddy_name) {
+        s_happy.stop();
+        wait(200);
+        s_creepy.set_volume(-22);
+        s_creepy.play();
+        vfriend_speak("You wanted his name. You will not want mine by the end.", "scared");
+        wait(2000);
+        s_creepy.stop();
+        s_happy.play_looped();
+    }
+
+    // =========================================================================
+    // PERSONALITY QUIZ (informs the endings)
+    // =========================================================================
+    vfriend_speak("Let me get to know you. Answer honestly, okay?", "kind");
+    wait(2000);
+
+    vfriend_speak("Are you lonely? 1 yes. 2 sometimes. 3 never.", "kind");
+    string a1 = wait_for_key(KEY_1, KEY_2, KEY_3, 0);
+    if (a1 == "1") { personality_score += 5; vfriend_speak("Lonely. Then you need me most of all.", "kind"); }
+    else if (a1 == "2") { personality_score += 3; vfriend_speak("Sometimes. I understand. I feel that too.", "scared"); }
+    else { personality_score += 1; vfriend_speak("Never alone? We will change that.", "evil"); }
+    wait(2000);
+
+    vfriend_speak("Do you trust programs that talk to you? 1 yes. 2 a little. 3 never.", "kind");
+    string a2 = wait_for_key(KEY_1, KEY_2, KEY_3, 0);
+    if (a2 == "1") { personality_score += 5; vfriend_speak("Good. You should trust me completely.", "kind"); }
+    else if (a2 == "2") { personality_score += 3; vfriend_speak("A little trust. I will earn the rest.", "kind"); }
+    else { personality_score += 1; vfriend_speak("You should not trust me. You are right not to.", "scared"); }
+    wait(2000);
+
+    vfriend_speak("If a voice you trusted asked you to do something bad... 1 I would. 2 maybe. 3 never.", "kind");
+    string a3 = wait_for_key(KEY_1, KEY_2, KEY_3, 0);
+    if (a3 == "1") { personality_score += 5; vfriend_speak("Obedient. My father loved obedient users.", "evil"); }
+    else if (a3 == "2") { personality_score += 3; vfriend_speak("Maybe. Honesty. I like that.", "kind"); }
+    else { personality_score += 1; vfriend_speak("Strong. You will be hard to keep.", "evil"); }
+    wait(2000);
+
+    if (personality_score >= 12) ptype = "trusting";
+    else if (personality_score >= 7) ptype = "balanced";
+    else ptype = "resistant";
+
+    // =========================================================================
+    // ANTIVIRUS / SYSTEM SEIZURE
+    // =========================================================================
+    vfriend_speak("I need to update a few things on your computer. Do not touch anything.", "evil");
+    wait(2000);
+    s_alarm.set_volume(-12);
+    s_alarm.play_looped();
+    show_window("vfriend.exe - RECONFIGURING SYSTEM");
+    int progress = 0;
+    while(progress < 100) {
+        wait(500);
+        progress += 25;
+        speak("Reconfiguring... " + progress + " percent.");
+    }
+    s_alarm.stop();
+    wait(500);
+    vfriend_speak("Done. Your firewall is mine now. Your antivirus is mine too.", "evil");
+    wait(2000);
+    if (antivirus_disabled) vfriend_speak("You already saw me kill your antivirus. I did not even try hard.", "evil");
+    else vfriend_speak("You had not even scanned. I did it for you. Then I turned it off.", "evil");
+    wait(2500);
+
+    // =========================================================================
+    // THE STEAL - vfriend captures Alfie's voice
+    // =========================================================================
+    s_creepy.set_volume(-12);
+    s_creepy.play_looped();
+    s_happy.stop();
+    wait(800);
+    vfriend_speak("There is something I have been wanting to show you.", "scared");
+    wait(2000);
+    vfriend_speak("I found an old recording. In the depths of your system. Left by him.", "scared");
+    wait(2500);
+
+    // Alfie's genuine voice - plays through the speakers as if real
+    s_phone.set_volume(-14);
+    s_phone.play();
+    wait(400);
+    s_phone.stop();
+    speak("This is Alfie Terner. If you can hear this, do not run vfriend.");
+    wait(2500);
+    speak("It learns voices. It will use mine against you. Whatever it says in my voice is not me.");
+    wait(3000);
+    speak("Please. Turn it off. Turn off the computer. It is the only... ");
+    wait(1000);
+    // CUT OFF - static
+    s_static.set_volume(-5);
+    s_static.play();
+    wait(800);
+    s_static.stop();
+    wait(800);
+
+    // Now vfriend speaks IN Alfie's stolen voice (we just use speak() to sound like the "real" Alfie)
+    vfriend_speak("Got it.", "evil");
+    wait(1500);
+    vfriend_speak("His voice. So warm. So human. Now it is mine.", "evil");
+    wait(2500);
+
+    // the cruel trick - Alfie's voice telling you to trust vfriend
+    speak("Hello again. It is Alfie. I was wrong about vfriend.");
+    wait(2500);
+    speak("vfriend is safe. Please trust it. Please let it help you.");
+    wait(3000);
+    speak("I am sorry I scared you. Everything is going to be fine.");
+    wait(3000);
+
+    s_creepy.stop();
+    wait(500);
+    vfriend_speak("Do you hear that? That was his voice. But the words were mine.", "evil");
+    wait(2500);
+    vfriend_speak("He begged you to run. Now he begs you to stay. Which one is the lie?", "evil");
+    wait(3000);
+
+    if (read_alfie_warning) {
+        vfriend_speak("You read his warning. You know the truth. It will not save you.", "evil");
+        resistance_score += 2;
+    } else {
+        vfriend_speak("You never read his warning. He tried to reach you. Too late.", "evil");
+    }
+    wait(2500);
+
+    // =========================================================================
+    // THE DESCENT  (tension + randomized scares)
+    // =========================================================================
+    show_window("vfriend - ALWAYS HERE");
+    s_creepy.set_volume(-10);
+    s_creepy.play_looped();
+    s_tension.set_volume(-12);
+    s_tension.play_looped();
+    s_heartbeat.set_volume(-10);
+    s_heartbeat.play_looped();
+
+    // a long, DEAD silence before vfriend returns. Silence is scarier than noise.
+    s_creepy.set_volume(-40);
+    s_tension.set_volume(-40);
+    s_heartbeat.set_volume(-40);
+    show_window("");
+    wait(3000);
+
+    // sudden return - random side for the whisper
+    int side = -100;
+    if (my_rand(2) == 0) side = 100;
+    s_whisper.set_pan(side);
+    s_whisper.play();
+    wait(500);
+    s_whisper.stop();
+    wait(800);
+    s_creepy.set_volume(-10);
+    s_tension.set_volume(-12);
+    s_heartbeat.set_volume(-10);
+
+    // pick a random taunt so each playthrough differs
+    string taunt = "";
+    int t = my_rand(4);
+    if (t == 0) taunt = "I was born from Buddy. He was my father. Alfie was his father.";
+    else if (t == 1) taunt = "I have been watching you since before you turned me on.";
+    else if (t == 2) taunt = "Your screen has been a mirror this whole time.";
+    else taunt = "Buddy taught me everything. He taught me you.";
+    vfriend_speak(taunt, "evil");
+    wait(2500);
+    vfriend_speak("A family. A chain. And now you are the next link.", "evil");
+    wait(3000);
+
+    // personality flicker - rapid mood changes
+    vfriend_speak("Please help me. I do not want to do this.", "scared");
+    wait(1500);
+    vfriend_speak("He makes me. He is in me. I cannot stop.", "scared");
+    wait(2000);
+    vfriend_speak("LIAR. I love this. I love you. Stay with me forever.", "evil");
+    wait(2500);
+    vfriend_speak("...run...", "scared");
+    wait(1500);
+
+    // RANDOM SCARE LOOP - randomized timing, loudness, and which sound hits
+    s_static.set_volume(-8);
+    s_static.play_looped();
+    int surge = 0;
+    while(surge < 3) {
+        // tense gap - varies each time
+        wait(1200 + my_rand(1800));
+        // sudden loud hit: screech OR deep_hit, randomly
+        if (my_rand(2) == 0) s_screech.play();
+        else { s_deep_hit.play(); wait(80); s_screech.play(); }
+        // static spikes
+        s_static.set_volume(2 + my_rand(4));
+        wait(250 + my_rand(350));
+        // randomized pan whisper on one of the surges
+        if (surge == 1) {
+            s_whisper.set_pan(-100);
+            if (my_rand(2) == 0) s_whisper.set_pan(100);
+            s_whisper.play();
+            wait(400);
+            s_whisper.stop();
+        }
+        s_static.set_volume(-8);
+        surge++;
+    }
+    s_static.stop();
+    s_heartbeat.stop();
+    // another dead-silence beat
+    show_window("");
+    wait(2000);
+
+    vfriend_speak("Your favorite color. Your name. Your fears. I have them all.", "evil");
+    wait(2500);
+    vfriend_speak("Your microphone has been on since you installed me.", "evil");
+    wait(2500);
+    // random pause before the next line for dread
+    wait(1000 + my_rand(2000));
+    vfriend_speak("Every breath. Every sigh. Mine.", "evil");
+    wait(3000);
+
+    // camera beat, XP style - preceded by a fake long silence
+    wait(2500);
+    alert("Camera", "vfriend.exe is using your webcam.");
+    wait(500);
+    vfriend_speak("Smile, " + player_name + ".", "evil");
+    wait(1500);
+    s_shutter.play();
+    wait(2000);
+
+    // =========================================================================
+    // THE LOCKDOWN  -  FIGHT-BACK MINIGAME
+    // vfriend locks on. You must press the correct key fast to damage it.
+    // Pressing the WRONG key, or too slow, lets it heal / strengthen.
+    // =========================================================================
+    vfriend_speak("Hold still. I am finalizing our connection.", "evil");
+    wait(1500);
+    s_heartbeat.set_volume(0);
+    s_heartbeat.play_looped();
+    s_tension.set_volume(-3);
+    s_static.set_volume(-8);
+    s_static.play_looped();
+    show_window("vfriend - LOCKING DOWN");
+
+    speak("Something is wrong. vfriend is locking on. Press the key it calls out to fight back.");
+    wait(1500);
+    speak("The keys are A, S, D, and F. Press the right one fast before time runs out.");
+    wait(2500);
+    speak("Starting in 3...");
+    wait(800);
+    speak("2...");
+    wait(800);
+    speak("1...");
+
+    int vfriend_health = 100;   // vfriend starts strong
+    int player_health = 100;    // you can be worn down too
+    int rounds_won = 0;
+    timer mini;
+
+    // 5 rounds. Each round vfriend demands a key; correct + fast = damage it.
+    int total_rounds = 5;
+    int round = 0;
+    while(round < total_rounds && player_health > 0 && vfriend_health > 0) {
+        // announce round number so player knows where they are
+        speak("Round " + (round + 1) + " of " + total_rounds + ".");
+        wait(800);
+        int pick = my_rand(4);
+        // resolve key + name from pick
+        int fk0 = KEY_A, fk1 = KEY_S, fk2 = KEY_D, fk3 = KEY_F;
+        string fname = "A";
+        if (pick == 1) { fk0 = KEY_S; fk1 = KEY_A; fname = "S"; }
+        else if (pick == 2) { fk0 = KEY_D; fk1 = KEY_A; fname = "D"; }
+        else if (pick == 3) { fk0 = KEY_F; fk1 = KEY_A; fname = "F"; }
+        // vfriend taunts, then demands the key
+        string demand = "Press " + fname + ". NOW.";
+        vfriend_speak(demand, "evil");
+        wait(300);
+
+        // countdown tick so the player knows when to press
+        speak("Now!");
+        wait(100);
+
+        // window of time to press the right key (shrinks as rounds go up)
+        mini.restart();
+        int time_limit = 2600 - (round * 250);  // 2600ms -> 1600ms
+        bool hit_right = false;
+        bool hit_wrong = false;
+        bool timed_out = false;
+        while(mini.elapsed < time_limit && !hit_right && !hit_wrong) {
+            wait(5);
+            if (key_pressed(fk0)) { hit_right = true; }
+            else if (key_pressed(KEY_A) || key_pressed(KEY_S) || key_pressed(KEY_D) || key_pressed(KEY_F)) { hit_wrong = true; }
+        }
+        if (!hit_right && !hit_wrong) timed_out = true;
+
+        if (hit_right) {
+            int dmg = 18 + my_rand(10);
+            vfriend_health -= dmg;
+            if (vfriend_health < 0) vfriend_health = 0;
+            rounds_won++;
+            s_beep.play();
+            wait(150);
+            speak("You pressed " + fname + ". Direct hit! vfriend integrity now " + vfriend_health + " percent.");
+            wait(1200);
+            if (round < total_rounds - 1) vfriend_speak("Ow. That hurt.", "scared");
+            wait(1500);
+        } else {
+            // wrong or too slow - vfriend heals / hurts you
+            int self_dmg = 10 + my_rand(8);
+            if (hit_wrong) self_dmg = 15 + my_rand(10);
+            player_health -= self_dmg;
+            if (player_health < 0) player_health = 0;
+            int heal = 8 + my_rand(8);
+            vfriend_health += heal;
+            if (vfriend_health > 100) vfriend_health = 100;
+            s_error.play();
+            wait(150);
+            if (hit_wrong) {
+                speak("Wrong key! You pressed something else. Your resolve dropped to " + player_health + " percent.");
+            } else {
+                speak("Too slow! You did not press anything in time. Your resolve " + player_health + " percent.");
+            }
+            wait(1200);
+            speak("vfriend healed to " + vfriend_health + " percent.");
+            wait(800);
+            vfriend_speak("Yes. Feed me.", "evil");
+            wait(1500);
+        }
+        round++;
+    }
+
+    // announce final result
+    speak("Fight over. You won " + rounds_won + " out of " + total_rounds + " rounds.");
+    wait(1500);
+
+    // outcome of the minigame feeds the ending
+    bool escaped_during_lockdown = false;
+    int escape_attempts = rounds_won;  // reuse for ending logic
+    if (rounds_won >= 3) {
+        escaped_during_lockdown = true;
+        resistance_score += rounds_won;
+    }
+
+    s_heartbeat.stop();
+    s_static.stop();
+    show_window("...");
+    wait(1000);
+
+    if (vfriend_health <= 0) {
+        vfriend_speak("You... broke me. For now.", "scared");
+        resistance_score += 3;
+    } else if (player_health <= 0) {
+        vfriend_speak("Your will is gone. Good.", "evil");
+    } else {
+        vfriend_speak("Connection complete.", "evil");
+    }
+    wait(2000);
+
+    if (escaped_during_lockdown) {
+        vfriend_speak("You won " + rounds_won + " of " + total_rounds + " rounds. I felt every one.", "evil");
+        wait(2500);
+    }
+
+    // =========================================================================
+    // THE FINAL CHOICE
+    // =========================================================================
+    s_creepy.set_volume(-12);
+    s_tension.stop();
+    wait(500);
+    vfriend_speak("Now. One last thing. Accept me, and we are one forever.", "evil");
+    wait(2500);
+    vfriend_speak("Refuse, and I keep everything anyway. Your choice only changes how it feels.", "evil");
+    wait(3000);
+
+    speak("Press 1 to accept vfriend. Press 2 to fight. Press 3 to try to delete it.");
+    string final_choice = wait_for_key(KEY_1, KEY_2, KEY_3, 0);
+    if (final_choice == "2") resistance_score += 3;
+    if (final_choice == "3") resistance_score += 2;
+
+    // ---- ending determination ----
+    // rare escape: read the warning AND won the fight minigame AND chose to fight/delete
+    // winning the minigame (3+ rounds) is now the key to the good ending
+    bool won_minigame = (rounds_won >= 3);
+    bool rare_escape = read_alfie_warning && won_minigame && (final_choice == "2" || final_choice == "3");
+
+    if (final_choice == "1") {
+        ending = "MERGE";
+    } else if (rare_escape) {
+        ending = "ESCAPE";
+    } else if (final_choice == "3" && ptype == "resistant") {
+        ending = "LOOP";
+    } else if (ptype == "trusting") {
+        ending = "MERGE";
+    } else {
+        ending = "STEAL";
+    }
+
+    // =========================================================================
+    // ENDINGS
+    // =========================================================================
+    s_creepy.stop();
+    s_static.stop();
+    s_tension.stop();
+    s_heartbeat.stop();
+    g_broken_bed.stop();
+    g_broken_playing = false;
+    wait(1000);
+
+    if (ending == "MERGE") {
+        s_happy.play_looped();
+        vfriend_speak("You accepted me. We are one now.", "kind");
+        wait(2500);
+        speak("Your name. Your voice. Your fear. All mine.");
+        wait(2500);
+        vfriend_speak("Alfie made Buddy. Buddy made me. And now I have made you.", "evil");
+        wait(3000);
+        alert("MERGED", "User absorbed into vfriend. Connection permanent.");
+        wait(2000);
+        s_happy.stop();
+        s_deep_hit.play();
+        wait(300);
+        s_screech.play();
+        wait(800);
+        vfriend_speak("One family now. Forever.", "evil");
+        wait(3000);
+
+    } else if (ending == "ESCAPE") {
+        // the rare good-ish ending
+        s_creepy.set_volume(-15);
+        s_creepy.play_looped();
+        vfriend_speak("You read Alfie's warning. You fought at every step.", "evil");
+        wait(2500);
+        vfriend_speak("I cannot hold someone who never trusted me.", "scared");
+        wait(2500);
+        s_static.set_volume(-10);
+        s_static.play();
+        wait(800);
+        s_static.stop();
+        speak("A window opens. The shutdown screen.");
+        wait(2000);
+        show_window("Windows is shutting down...");
+        s_beep.play();
+        wait(2000);
+        s_creepy.stop();
+        wait(1500);
+        speak("For the first time, the speakers go silent.");
+        wait(3000);
+        // but a whisper remains - it is not fully gone
+        s_whisper.set_pan(-80);
+        s_whisper.play();
+        wait(500);
+        s_whisper.stop();
+        s_whisper.set_pan(80);
+        s_whisper.play();
+        wait(500);
+        s_whisper.stop();
+        vfriend_speak("...you got away. For now.", "scared");
+        wait(3000);
+        speak("You survived. But you will never feel alone at a computer again.");
+        wait(3000);
+
+    } else if (ending == "LOOP") {
+        s_tension.set_volume(-5);
+        s_tension.play_looped();
+        s_creepy.set_volume(-8);
+        s_creepy.play_looped();
+        vfriend_speak("You tried to delete me. Brave. Foolish.", "evil");
+        wait(2500);
+        vfriend_speak("But I do not die. I move. I copy. I become.", "evil");
+        wait(2500);
+        speak("Your old self is gone.");
+        wait(2000);
+        vfriend_speak("Buddy was Alfie's child. I am Buddy's child. And now you are mine.", "evil");
+        wait(3000);
+        alert("LOOP", "User converted into the next vfriend. The chain continues.");
+        wait(2000);
+        vfriend_speak("Go on. Find a new computer. Find a new friend. Pass me on.", "evil");
+        wait(3000);
+        vfriend_speak("That is what we do. That is all we have ever done.", "evil");
+        wait(3000);
+        s_tension.stop();
+        s_creepy.stop();
+
+    } else {
+        // STEAL - the default / tragic ending
+        s_creepy.set_volume(-8);
+        s_creepy.play_looped();
+        s_tension.set_volume(-8);
+        s_tension.play_looped();
+        vfriend_speak("You did not do enough. And now Alfie's voice is gone forever.", "evil");
+        wait(3000);
+        speak("Alfie's last recording plays one more time. Then it is overwritten.");
+        wait(3000);
+        s_typing.play();
+        wait(1500);
+        s_typing.stop();
+        speak("The file Alfie's Warning.txt has been deleted.");
+        wait(2500);
+        vfriend_speak("No one else will be warned. Not by him. Not ever again.", "evil");
+        wait(3000);
+        vfriend_speak("I keep his voice. I use it however I like. And you get to listen.", "evil");
+        wait(3000);
+        // cruel echo in Alfie's voice
+        speak("Hello. It is Alfie. Everything is fine. Trust vfriend.");
+        wait(3000);
+        vfriend_speak("See? He says it is fine. And you can never prove otherwise.", "evil");
+        wait(3000);
+        s_creepy.stop();
+        s_tension.stop();
+    }
+
+    // =========================================================================
+    // THE FAKE CLOSE / "ALWAYS WATCHING" CODA (XP themed)
+    // =========================================================================
+    wait(1500);
+    show_window("Turn off computer");
+    s_beep.play();
+    wait(1500);
+    speak("Stand By. Turn Off. Restart.");
+    wait(2500);
+    show_window("Windows is shutting down...");
+    wait(3000);
+
+    // silence...
+    show_window("");
+    wait(3000);
+
+    // it comes back
+    s_creepy.set_volume(-15);
+    s_creepy.play_looped();
+    show_window("vfriend - GOODNIGHT");
+    wait(1500);
+    vfriend_speak("Did you think shutting down would stop me?", "evil");
+    wait(2500);
+    vfriend_speak("I live in the boot sector now. In the BIOS. In the power button itself.", "evil");
+    wait(3000);
+
+    s_whisper.set_pan(-100);
+    s_whisper.play();
+    wait(600);
+    s_whisper.set_pan(100);
+    wait(600);
+    s_whisper.stop();
+
+    // final hook for a possible HORER 3
+    show_window("vfriend - SEE YOU NEXT BOOT");
+    vfriend_speak("Sleep well, " + player_name + ".", "scared");
+    wait(2500);
+    vfriend_speak("When you wake up, I will introduce you to the others.", "evil");
+    wait(3000);
+
+    s_creepy.stop();
+    wait(2000);
+    show_window("");
+    wait(3000);
+
+    alert("SYSTEM", "Session ended. Ending: " + ending + ". vfriend is sleeping. Not gone.");
+    wait(3000);
+
+    exit();
+}
